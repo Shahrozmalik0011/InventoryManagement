@@ -637,19 +637,12 @@
           </div>
 
           <div style="background:#f6f6fd;border-radius:10px;padding:6px 12px;margin-bottom:6px;font-size:11.5px;color:#7a76bb">Enter quantities &amp; unit prices. Shipping is split by weight; landed cost updates live.</div>
-          <div style="display:flex;align-items:center;flex-wrap:wrap;gap:8px;background:#fff;border:1px dashed rgba(79,70,229,.35);border-radius:10px;padding:8px 10px;margin-bottom:12px">
-            <span style="font-size:11px;font-weight:700;color:#103164;white-space:nowrap">Apply to all rows:</span>
-            <input type="number" value="{{ ppBulkQty }}" onChange="{{ onPpBulkQty }}" placeholder="Qty" style="width:76px;padding:6px 9px;border:1px solid rgba(16,49,100,.16);border-radius:8px;font-size:12.5px;font-family:'IBM Plex Mono',monospace;color:#103164">
-            <button onClick="{{ applyBulkQty }}" style="padding:6px 12px;border-radius:8px;border:none;background:#4f46e5;color:#fff;font-weight:700;font-size:11.5px;cursor:pointer;white-space:nowrap">Apply qty</button>
-            <input type="number" step="0.01" value="{{ ppBulkPrice }}" onChange="{{ onPpBulkPrice }}" placeholder="Unit price" style="width:92px;padding:6px 9px;border:1px solid rgba(16,49,100,.16);border-radius:8px;font-size:12.5px;font-family:'IBM Plex Mono',monospace;color:#103164">
-            <button onClick="{{ applyBulkPrice }}" style="padding:6px 12px;border-radius:8px;border:none;background:#4f46e5;color:#fff;font-weight:700;font-size:11.5px;cursor:pointer;white-space:nowrap">Apply price</button>
-          </div>
           <table style="width:100%;border-collapse:collapse">
             <thead><tr>
               <th style="text-align:left;padding:8px 8px;font:600 10px 'Plus Jakarta Sans';text-transform:uppercase;letter-spacing:.04em;color:#7a76bb;border-bottom:1px solid rgba(16,49,100,.08)">SKU</th>
               <th style="text-align:right;padding:8px 8px;font:600 10px 'Plus Jakarta Sans';text-transform:uppercase;letter-spacing:.04em;color:#7a76bb;border-bottom:1px solid rgba(16,49,100,.08)">Wt</th>
-              <th style="text-align:center;padding:8px 8px;font:600 10px 'Plus Jakarta Sans';text-transform:uppercase;letter-spacing:.04em;color:#7a76bb;border-bottom:1px solid rgba(16,49,100,.08)">Qty</th>
-              <th style="text-align:center;padding:8px 8px;font:600 10px 'Plus Jakarta Sans';text-transform:uppercase;letter-spacing:.04em;color:#7a76bb;border-bottom:1px solid rgba(16,49,100,.08)">Unit ({{ ppCurrency }})</th>
+              <th style="text-align:center;padding:8px 8px;font:600 10px 'Plus Jakarta Sans';text-transform:uppercase;letter-spacing:.04em;color:#7a76bb;border-bottom:1px solid rgba(16,49,100,.08)"><div style="display:inline-flex;align-items:center;gap:5px">Qty<button onClick="{{ onApplyAllQty }}" title="Fill first row's qty down to all rows" style="width:20px;height:20px;border-radius:6px;border:1px solid rgba(79,70,229,.3);background:#fff;color:#4f46e5;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0" style-hover="background:#f0eefb"><svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M7 1.5v7M4 6l3 3 3-3M2.5 12.5h9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div></th>
+              <th style="text-align:center;padding:8px 8px;font:600 10px 'Plus Jakarta Sans';text-transform:uppercase;letter-spacing:.04em;color:#7a76bb;border-bottom:1px solid rgba(16,49,100,.08)"><div style="display:inline-flex;align-items:center;gap:5px">Unit ({{ ppCurrency }})<button onClick="{{ onApplyAllPrice }}" title="Fill first row's unit price down to all rows" style="width:20px;height:20px;border-radius:6px;border:1px solid rgba(79,70,229,.3);background:#fff;color:#4f46e5;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0" style-hover="background:#f0eefb"><svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M7 1.5v7M4 6l3 3 3-3M2.5 12.5h9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div></th>
               <th style="text-align:right;padding:8px 8px;font:600 10px 'Plus Jakarta Sans';text-transform:uppercase;letter-spacing:.04em;color:#103164;border-bottom:1px solid rgba(16,49,100,.08)">Landed £</th>
             </tr></thead>
             <tbody>
@@ -1070,25 +1063,28 @@ class Component extends DCLogic {
   openPurchase(){
     const p=this.state.products[0];
     const r=Number(this.props.defaultRate ?? 0.79);
-    this.setState({ modal:'purchase', newPurchase:{ editId:null, supplier:'', date:'2024-12-01', origin:'China', currency:'USD', rate:r, shipping:0, tax:0, productId:p?p.id:'', lines:{}, bulkQty:'', bulkPrice:'' } });
+    this.setState({ modal:'purchase', newPurchase:{ editId:null, supplier:'', date:'2024-12-01', origin:'China', currency:'USD', rate:r, shipping:0, tax:0, productId:p?p.id:'', lines:{} } });
   }
   editBatch(id){
     const b=this.state.batches.find(x=>x.id===id); if(!b) return;
     const lines={}; b.lines.forEach(l=>{ lines[l.sku]={ qty:String(l.qty), price:String(l.price) }; });
     let dISO=b.dateISO||''; if(!dISO){ try{ const d=new Date(b.date); if(!isNaN(d)) dISO=d.toISOString().slice(0,10); }catch(e){} }
-    this.setState({ modal:'purchase', newPurchase:{ editId:id, origId:b.id, origDbId:b.dbId, supplier:b.supplier, date:dISO, origin:b.origin, currency:b.currency, rate:b.rate, shipping:b.shipping, tax:b.tax, productId:b.productId, lines, bulkQty:'', bulkPrice:'' } });
+    this.setState({ modal:'purchase', newPurchase:{ editId:id, origId:b.id, origDbId:b.dbId, supplier:b.supplier, date:dISO, origin:b.origin, currency:b.currency, rate:b.rate, shipping:b.shipping, tax:b.tax, productId:b.productId, lines } });
   }
   deleteBatch(id){ if(this.live){ this._deleteBatchLive(id); return; } this.setState(s=>({ batches:s.batches.filter(b=>b.id!==id) })); }
   onPp(field, v){ this.setState(s=>({ newPurchase:{...s.newPurchase, [field]:v} })); }
   onPpOrigin(e){ const o=e.target.value; this.setState(s=>({ newPurchase:{...s.newPurchase, origin:o, currency:o==='China'?'USD':'GBP', rate:o==='China'?(s.newPurchase.rate||0.79):1} })); }
   setLine(sku, field, v){ this.setState(s=>{ const cur=s.newPurchase.lines[sku]||{qty:'',price:''}; return { newPurchase:{...s.newPurchase, lines:{...s.newPurchase.lines,[sku]:{...cur,[field]:v}}} }; }); }
-  applyAllLines(field, v){
+  applyAllPurchase(field){
     this.setState(s=>{
-      const pp=s.newPurchase; if(!pp) return {};
-      const prod=this.state.products.find(p=>p.id===pp.productId); if(!prod) return {};
-      const lines={...pp.lines};
-      prod.skus.forEach(sk=>{ const cur=lines[sk.sku]||{qty:'',price:''}; lines[sk.sku]={...cur,[field]:v}; });
-      return { newPurchase:{...pp, lines} };
+      const np=s.newPurchase; if(!np) return {};
+      const prod=this.state.products.find(p=>p.id===np.productId);
+      const skus=prod?prod.skus:[]; if(!skus.length) return {};
+      const firstVal=((np.lines[skus[0].sku]||{})[field])||'';
+      if(firstVal==='') return {};
+      const lines={...np.lines};
+      skus.forEach(sk=>{ lines[sk.sku]={...(lines[sk.sku]||{qty:'',price:''}), [field]:firstVal}; });
+      return { newPurchase:{...np, lines} };
     });
   }
   savePurchase(){
@@ -1333,11 +1329,11 @@ class Component extends DCLogic {
 
     // ----- modal: new purchase -----
     const pp=this.state.newPurchase;
-    let ppRows=[], ppTUnits='0', ppTGoods=this.gbp(0), ppTLanded=this.gbp(0), ppBulkQty='', ppBulkPrice='';
+    let ppRows=[], ppTUnits='0', ppTGoods=this.gbp(0), ppTLanded=this.gbp(0);
     let ppSupplier='',ppDate='',ppOrigin='China',ppCurrency='USD',ppRate=0,ppShip=0,ppTax=0,ppProductId='';
     const ppProductOptions=this.state.products.map(p=>({id:p.id,name:p.name}));
     if(pp){
-      ppSupplier=pp.supplier; ppDate=pp.date; ppOrigin=pp.origin; ppCurrency=pp.currency; ppRate=pp.rate; ppShip=pp.shipping; ppTax=pp.tax; ppProductId=pp.productId; ppBulkQty=pp.bulkQty??''; ppBulkPrice=pp.bulkPrice??'';
+      ppSupplier=pp.supplier; ppDate=pp.date; ppOrigin=pp.origin; ppCurrency=pp.currency; ppRate=pp.rate; ppShip=pp.shipping; ppTax=pp.tax; ppProductId=pp.productId;
       const prod=this.state.products.find(p=>p.id===pp.productId);
       const rate=Number(pp.rate)||0;
       const entered=(prod?prod.skus:[]).map(s=>{ const ln=pp.lines[s.sku]||{}; return { sku:s.sku, label:s.label, weightG:s.weightG, qty:Number(ln.qty)||0, price:Number(ln.price)||0, qtyRaw:ln.qty??'', priceRaw:ln.price??'' }; });
@@ -1419,9 +1415,7 @@ class Component extends DCLogic {
       onPpShip:(e)=>this.onPp('shipping',e.target.value), onPpTax:(e)=>this.onPp('tax',e.target.value),
       onPpProduct:(e)=>this.onPp('productId',e.target.value),
       ppRows, ppTUnits, ppTGoods, ppTLanded,
-      ppBulkQty, ppBulkPrice,
-      onPpBulkQty:(e)=>this.onPp('bulkQty',e.target.value), onPpBulkPrice:(e)=>this.onPp('bulkPrice',e.target.value),
-      applyBulkQty:()=>this.applyAllLines('qty', ppBulkQty), applyBulkPrice:()=>this.applyAllLines('price', ppBulkPrice),
+      onApplyAllQty:()=>this.applyAllPurchase('qty'), onApplyAllPrice:()=>this.applyAllPurchase('price'),
       savePurchase:()=>this.savePurchase(), purchaseModalTitle:(pp&&pp.editId)?('Edit batch '+pp.origId):'New purchase batch',
     };
   }
