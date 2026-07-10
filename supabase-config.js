@@ -10,6 +10,6 @@
 //  Find these in Supabase → Settings → API.
 // ============================================================
 window.LYZOO_CONFIG = {
-  url: '',       // e.g. 'https://abcd1234.supabase.co'
-  anonKey: ''    // your anon public key (safe to commit — RLS protects data)
+  url: 'https://gocnwvhdmweujhcgnqsh.supabase.co',
+  anonKey: 'sb_publishable_xkRMT7H8kRvL5ivov8J7-w_gnHlvz9_'    // your anon public key (safe to commit — RLS protects data)
 };
