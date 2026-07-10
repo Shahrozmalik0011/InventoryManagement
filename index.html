@@ -637,6 +637,13 @@
           </div>
 
           <div style="background:#f6f6fd;border-radius:10px;padding:6px 12px;margin-bottom:6px;font-size:11.5px;color:#7a76bb">Enter quantities &amp; unit prices. Shipping is split by weight; landed cost updates live.</div>
+          <div style="display:flex;align-items:center;flex-wrap:wrap;gap:8px;background:#fff;border:1px dashed rgba(79,70,229,.35);border-radius:10px;padding:8px 10px;margin-bottom:12px">
+            <span style="font-size:11px;font-weight:700;color:#103164;white-space:nowrap">Apply to all rows:</span>
+            <input type="number" value="{{ ppBulkQty }}" onChange="{{ onPpBulkQty }}" placeholder="Qty" style="width:76px;padding:6px 9px;border:1px solid rgba(16,49,100,.16);border-radius:8px;font-size:12.5px;font-family:'IBM Plex Mono',monospace;color:#103164">
+            <button onClick="{{ applyBulkQty }}" style="padding:6px 12px;border-radius:8px;border:none;background:#4f46e5;color:#fff;font-weight:700;font-size:11.5px;cursor:pointer;white-space:nowrap">Apply qty</button>
+            <input type="number" step="0.01" value="{{ ppBulkPrice }}" onChange="{{ onPpBulkPrice }}" placeholder="Unit price" style="width:92px;padding:6px 9px;border:1px solid rgba(16,49,100,.16);border-radius:8px;font-size:12.5px;font-family:'IBM Plex Mono',monospace;color:#103164">
+            <button onClick="{{ applyBulkPrice }}" style="padding:6px 12px;border-radius:8px;border:none;background:#4f46e5;color:#fff;font-weight:700;font-size:11.5px;cursor:pointer;white-space:nowrap">Apply price</button>
+          </div>
           <table style="width:100%;border-collapse:collapse">
             <thead><tr>
               <th style="text-align:left;padding:8px 8px;font:600 10px 'Plus Jakarta Sans';text-transform:uppercase;letter-spacing:.04em;color:#7a76bb;border-bottom:1px solid rgba(16,49,100,.08)">SKU</th>
@@ -1063,18 +1070,27 @@ class Component extends DCLogic {
   openPurchase(){
     const p=this.state.products[0];
     const r=Number(this.props.defaultRate ?? 0.79);
-    this.setState({ modal:'purchase', newPurchase:{ editId:null, supplier:'', date:'2024-12-01', origin:'China', currency:'USD', rate:r, shipping:0, tax:0, productId:p?p.id:'', lines:{} } });
+    this.setState({ modal:'purchase', newPurchase:{ editId:null, supplier:'', date:'2024-12-01', origin:'China', currency:'USD', rate:r, shipping:0, tax:0, productId:p?p.id:'', lines:{}, bulkQty:'', bulkPrice:'' } });
   }
   editBatch(id){
     const b=this.state.batches.find(x=>x.id===id); if(!b) return;
     const lines={}; b.lines.forEach(l=>{ lines[l.sku]={ qty:String(l.qty), price:String(l.price) }; });
     let dISO=b.dateISO||''; if(!dISO){ try{ const d=new Date(b.date); if(!isNaN(d)) dISO=d.toISOString().slice(0,10); }catch(e){} }
-    this.setState({ modal:'purchase', newPurchase:{ editId:id, origId:b.id, origDbId:b.dbId, supplier:b.supplier, date:dISO, origin:b.origin, currency:b.currency, rate:b.rate, shipping:b.shipping, tax:b.tax, productId:b.productId, lines } });
+    this.setState({ modal:'purchase', newPurchase:{ editId:id, origId:b.id, origDbId:b.dbId, supplier:b.supplier, date:dISO, origin:b.origin, currency:b.currency, rate:b.rate, shipping:b.shipping, tax:b.tax, productId:b.productId, lines, bulkQty:'', bulkPrice:'' } });
   }
   deleteBatch(id){ if(this.live){ this._deleteBatchLive(id); return; } this.setState(s=>({ batches:s.batches.filter(b=>b.id!==id) })); }
   onPp(field, v){ this.setState(s=>({ newPurchase:{...s.newPurchase, [field]:v} })); }
   onPpOrigin(e){ const o=e.target.value; this.setState(s=>({ newPurchase:{...s.newPurchase, origin:o, currency:o==='China'?'USD':'GBP', rate:o==='China'?(s.newPurchase.rate||0.79):1} })); }
   setLine(sku, field, v){ this.setState(s=>{ const cur=s.newPurchase.lines[sku]||{qty:'',price:''}; return { newPurchase:{...s.newPurchase, lines:{...s.newPurchase.lines,[sku]:{...cur,[field]:v}}} }; }); }
+  applyAllLines(field, v){
+    this.setState(s=>{
+      const pp=s.newPurchase; if(!pp) return {};
+      const prod=this.state.products.find(p=>p.id===pp.productId); if(!prod) return {};
+      const lines={...pp.lines};
+      prod.skus.forEach(sk=>{ const cur=lines[sk.sku]||{qty:'',price:''}; lines[sk.sku]={...cur,[field]:v}; });
+      return { newPurchase:{...pp, lines} };
+    });
+  }
   savePurchase(){
     if(this.live){ this._savePurchaseLive(); return; }
     const np=this.state.newPurchase; if(!np) return;
@@ -1317,11 +1333,11 @@ class Component extends DCLogic {
 
     // ----- modal: new purchase -----
     const pp=this.state.newPurchase;
-    let ppRows=[], ppTUnits='0', ppTGoods=this.gbp(0), ppTLanded=this.gbp(0);
+    let ppRows=[], ppTUnits='0', ppTGoods=this.gbp(0), ppTLanded=this.gbp(0), ppBulkQty='', ppBulkPrice='';
     let ppSupplier='',ppDate='',ppOrigin='China',ppCurrency='USD',ppRate=0,ppShip=0,ppTax=0,ppProductId='';
     const ppProductOptions=this.state.products.map(p=>({id:p.id,name:p.name}));
     if(pp){
-      ppSupplier=pp.supplier; ppDate=pp.date; ppOrigin=pp.origin; ppCurrency=pp.currency; ppRate=pp.rate; ppShip=pp.shipping; ppTax=pp.tax; ppProductId=pp.productId;
+      ppSupplier=pp.supplier; ppDate=pp.date; ppOrigin=pp.origin; ppCurrency=pp.currency; ppRate=pp.rate; ppShip=pp.shipping; ppTax=pp.tax; ppProductId=pp.productId; ppBulkQty=pp.bulkQty??''; ppBulkPrice=pp.bulkPrice??'';
       const prod=this.state.products.find(p=>p.id===pp.productId);
       const rate=Number(pp.rate)||0;
       const entered=(prod?prod.skus:[]).map(s=>{ const ln=pp.lines[s.sku]||{}; return { sku:s.sku, label:s.label, weightG:s.weightG, qty:Number(ln.qty)||0, price:Number(ln.price)||0, qtyRaw:ln.qty??'', priceRaw:ln.price??'' }; });
@@ -1403,6 +1419,9 @@ class Component extends DCLogic {
       onPpShip:(e)=>this.onPp('shipping',e.target.value), onPpTax:(e)=>this.onPp('tax',e.target.value),
       onPpProduct:(e)=>this.onPp('productId',e.target.value),
       ppRows, ppTUnits, ppTGoods, ppTLanded,
+      ppBulkQty, ppBulkPrice,
+      onPpBulkQty:(e)=>this.onPp('bulkQty',e.target.value), onPpBulkPrice:(e)=>this.onPp('bulkPrice',e.target.value),
+      applyBulkQty:()=>this.applyAllLines('qty', ppBulkQty), applyBulkPrice:()=>this.applyAllLines('price', ppBulkPrice),
       savePurchase:()=>this.savePurchase(), purchaseModalTitle:(pp&&pp.editId)?('Edit batch '+pp.origId):'New purchase batch',
     };
   }
