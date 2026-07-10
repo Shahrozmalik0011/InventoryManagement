@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  doc-page:not(:defined){visibility:hidden}
+  *{box-sizing:border-box}
+  h1,h2,h3,h4{font-family:'Plus Jakarta Sans',system-ui,sans-serif;color:#103164;letter-spacing:-.01em}
+  p,li,td,th{font-family:'Plus Jakarta Sans',system-ui,sans-serif;color:#545454}
+  a{color:#4f46e5}
+  code,pre{font-family:'IBM Plex Mono',ui-monospace,monospace}
+</style>
+</helmet>
+<x-import component-from-global-scope="doc-page" from="./doc-page.js" size="letter" margin="0.7in" hint-size="100%,100%">
+
+  <div slot="header" style="display:flex;justify-content:space-between;align-items:center;font-family:'Plus Jakarta Sans';font-size:10px;color:#7a76bb;font-weight:600;letter-spacing:.02em;padding-bottom:6px;border-bottom:1px solid #eceafa">
+    <span>Lyzoo Group — Supabase &amp; GitHub Setup</span>
+    <span>Inventory · Purchasing · COGS</span>
+  </div>
+  <div slot="footer" style="display:flex;justify-content:space-between;align-items:center;font-family:'Plus Jakarta Sans';font-size:10px;color:#9a97c4;padding-top:6px;border-top:1px solid #eceafa">
+    <span>Technical implementation guide</span>
+    <span>v2.0</span>
+  </div>
+
+  <!-- ===== TITLE ===== -->
+  <div style="border-left:5px solid #4f46e5;padding:2px 0 2px 16px;margin:10px 0 6px">
+    <h1 style="font-size:29px;margin:0 0 6px;font-weight:800">Lyzoo Group — Backend &amp; Deployment Guide</h1>
+    <p style="font-size:14px;margin:0;color:#7a76bb;font-weight:600">Connecting the prototype to Supabase, deploying on GitHub Pages, and validating COGS accuracy before going live.</p>
+  </div>
+  <p style="font-size:13.5px;line-height:1.65;margin:14px 0 0">This guide turns the working UI prototype into a live application. It gives you the exact database schema, the weighted-average COGS logic implemented <em>inside</em> the database (so every screen reads the same numbers), the connection and authentication setup, file-upload handling, a GitHub Pages deployment path, and a testing checklist to confirm the numbers are correct <strong>before</strong> you point it at real data.</p>
+
+  <div style="background:#f6f6fd;border:1px solid #e4e1f7;border-radius:10px;padding:14px 16px;margin:18px 0 4px">
+    <div style="font-size:11px;font-weight:800;color:#4f46e5;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Golden rule — test on a dev project first</div>
+    <p style="font-size:12.5px;line-height:1.6;margin:0">Create <strong>two</strong> Supabase projects: <code>lyzoo-dev</code> (seeded with a copy of a few real orders) and <code>lyzoo-prod</code> (live data). Validate all COGS math against known figures in dev, and only switch the app's keys to prod once it matches. The free tier allows multiple projects at no cost.</p>
+  </div>
+
+  <!-- ===== 1. TECH STACK ===== -->
+  <h2 style="font-size:19px;margin:26px 0 10px;padding-bottom:6px;border-bottom:2px solid #eceafa">1 · Recommended tech stack</h2>
+  <p style="font-size:13.5px;line-height:1.65;margin:0 0 10px">Everything below is compatible with static GitHub hosting — no server to run, no build server required.</p>
+  <table style="width:100%;border-collapse:collapse;font-size:12.5px">
+    <thead><tr style="background:#103164">
+      <th style="text-align:left;padding:8px 12px;color:#fff;font-weight:700;border:1px solid #103164">Layer</th>
+      <th style="text-align:left;padding:8px 12px;color:#fff;font-weight:700;border:1px solid #103164">Choice</th>
+      <th style="text-align:left;padding:8px 12px;color:#fff;font-weight:700;border:1px solid #103164">Why</th>
+    </tr></thead>
+    <tbody>
+      <tr><td style="padding:7px 12px;border:1px solid #e4e1f7;font-weight:700;color:#103164">Frontend</td><td style="padding:7px 12px;border:1px solid #e4e1f7">Static HTML + JavaScript (the prototype)</td><td style="padding:7px 12px;border:1px solid #e4e1f7">Serves directly from GitHub Pages; no build step needed.</td></tr>
+      <tr style="background:#faf9fe"><td style="padding:7px 12px;border:1px solid #e4e1f7;font-weight:700;color:#103164">Database</td><td style="padding:7px 12px;border:1px solid #e4e1f7">Supabase (PostgreSQL)</td><td style="padding:7px 12px;border:1px solid #e4e1f7">Relational tables + SQL views hold the COGS logic centrally.</td></tr>
+      <tr><td style="padding:7px 12px;border:1px solid #e4e1f7;font-weight:700;color:#103164">API client</td><td style="padding:7px 12px;border:1px solid #e4e1f7"><code>@supabase/supabase-js</code> (via CDN)</td><td style="padding:7px 12px;border:1px solid #e4e1f7">One <code>&lt;script&gt;</code> tag — talks to Postgres over REST.</td></tr>
+      <tr style="background:#faf9fe"><td style="padding:7px 12px;border:1px solid #e4e1f7;font-weight:700;color:#103164">Auth</td><td style="padding:7px 12px;border:1px solid #e4e1f7">Supabase Auth (email + password)</td><td style="padding:7px 12px;border:1px solid #e4e1f7">Single business login; scales to roles later.</td></tr>
+      <tr><td style="padding:7px 12px;border:1px solid #e4e1f7;font-weight:700;color:#103164">File upload</td><td style="padding:7px 12px;border:1px solid #e4e1f7">Parse CSV in-browser; optionally Supabase Storage</td><td style="padding:7px 12px;border:1px solid #e4e1f7">SKU sheet validated client-side, rows inserted directly.</td></tr>
+      <tr style="background:#faf9fe"><td style="padding:7px 12px;border:1px solid #e4e1f7;font-weight:700;color:#103164">Hosting</td><td style="padding:7px 12px;border:1px solid #e4e1f7">GitHub Pages</td><td style="padding:7px 12px;border:1px solid #e4e1f7">Free static hosting straight from the repo.</td></tr>
+    </tbody>
+  </table>
+
+  <!-- ===== 2. FOLDER STRUCTURE ===== -->
+  <h2 style="font-size:19px;margin:26px 0 10px;padding-bottom:6px;border-bottom:2px solid #eceafa">2 · Folder structure</h2>
+  <p style="font-size:13.5px;line-height:1.65;margin:0 0 10px">A clean, scalable layout that GitHub Pages can serve as-is:</p>
+  <pre style="background:#0f1e3d;color:#dfe7f5;border-radius:10px;padding:16px 18px;font-size:12px;line-height:1.7;overflow-x:auto;margin:0;white-space:pre">lyzoo/
+├─ index.html              <span style="color:#8f9dbf"># app shell (the prototype)</span>
+├─ assets/
+│  ├─ app.js               <span style="color:#8f9dbf"># view logic + Supabase calls</span>
+│  ├─ supabase.js          <span style="color:#8f9dbf"># client init (URL + anon key)</span>
+│  ├─ cogs.js              <span style="color:#8f9dbf"># optional client-side fallbacks</span>
+│  └─ styles.css
+├─ modules/
+│  ├─ auth.js              <span style="color:#8f9dbf"># login gate + settings (Section 6)</span>
+│  ├─ products.js          <span style="color:#8f9dbf"># product + SKU sheet upload, edit/delete</span>
+│  ├─ purchases.js         <span style="color:#8f9dbf"># purchase batches, edit/delete</span>
+│  ├─ inventory.js         <span style="color:#8f9dbf"># nested stock ledger + record sales</span>
+│  └─ dashboard.js         <span style="color:#8f9dbf"># KPIs + movement analytics</span>
+├─ db/
+│  ├─ schema.sql           <span style="color:#8f9dbf"># tables + cascades (Sections 3, 10)</span>
+│  ├─ views.sql            <span style="color:#8f9dbf"># COGS + analytics views (Sections 4, 11)</span>
+│  └─ policies.sql         <span style="color:#8f9dbf"># row-level security (Section 6)</span>
+├─ .github/workflows/
+│  └─ deploy.yml           <span style="color:#8f9dbf"># optional Pages deploy action</span>
+└─ README.md</pre>
+
+  <!-- ===== 3. DATABASE SCHEMA ===== -->
+  <h2 style="font-size:19px;margin:26px 0 10px;padding-bottom:6px;border-bottom:2px solid #eceafa">3 · Database schema</h2>
+  <p style="font-size:13.5px;line-height:1.65;margin:0 0 6px">Five tables model the whole domain. Open Supabase → <strong>SQL Editor</strong> → paste and run <code>schema.sql</code>. Relationships: a <strong>product</strong> has many <strong>SKUs</strong>; a <strong>purchase batch</strong> has many <strong>purchase lines</strong>, each referencing a SKU; <strong>sales</strong> reference a SKU.</p>
+
+  <div style="text-align:center;margin:14px 0;font-size:12px;color:#7a76bb;font-family:'IBM Plex Mono'">
+    products&nbsp;──&lt;&nbsp;skus&nbsp;&gt;──&nbsp;purchase_lines&nbsp;&gt;──&nbsp;purchase_batches&nbsp;&nbsp;·&nbsp;&nbsp;skus&nbsp;──&lt;&nbsp;sales
+  </div>
+
+  <pre style="background:#0f1e3d;color:#dfe7f5;border-radius:10px;padding:16px 18px;font-size:11.5px;line-height:1.65;overflow-x:auto;margin:0;white-space:pre-wrap">-- ============ schema.sql ============
+create extension if not exists "pgcrypto";
+
+-- Products (e.g. "USB Flash Drive")
+create table products (
+  id          uuid primary key default gen_random_uuid(),
+  name        text not null,
+  created_at  timestamptz default now()
+);
+
+-- SKUs: the trackable unit. Weight is required (drives COGS).
+create table skus (
+  id          uuid primary key default gen_random_uuid(),
+  product_id  uuid not null references products(id) on delete cascade,
+  sku_code    text not null unique,
+  label       text,                       -- optional variant label
+  weight_g    numeric(10,2) not null check (weight_g &gt; 0),
+  created_at  timestamptz default now()
+);
+
+-- Purchase batches (one PO / import shipment)
+create table purchase_batches (
+  id               uuid primary key default gen_random_uuid(),
+  po_number        text not null unique,
+  product_id       uuid references products(id),
+  supplier         text,
+  origin           text not null default 'China',  -- 'China' | 'UK'
+  currency         text not null default 'USD',     -- 'USD' | 'GBP'
+  conversion_rate  numeric(12,4) not null default 1, -- source -&gt; GBP
+  shipping_gbp     numeric(12,2) not null default 0,
+  tax_gbp          numeric(12,2) not null default 0,
+  purchased_on     date not null default current_date,
+  created_at       timestamptz default now()
+);
+
+-- Line items within a batch
+create table purchase_lines (
+  id          uuid primary key default gen_random_uuid(),
+  batch_id    uuid not null references purchase_batches(id) on delete cascade,
+  sku_id      uuid not null references skus(id),
+  quantity    integer not null check (quantity &gt; 0),
+  unit_price  numeric(12,4) not null check (unit_price &gt;= 0) -- in batch currency
+);
+
+-- Sales: additive. Each row is "units sold in this period".
+create table sales (
+  id          uuid primary key default gen_random_uuid(),
+  sku_id      uuid not null references skus(id),
+  quantity    integer not null check (quantity &gt; 0),
+  sold_on     date not null default current_date,
+  created_at  timestamptz default now()
+);
+
+create index on skus(product_id);
+create index on purchase_lines(batch_id);
+create index on purchase_lines(sku_id);
+create index on sales(sku_id);</pre>
+  <p style="font-size:11.5px;line-height:1.55;margin:8px 0 0;color:#7a76bb"><strong>Why sales are additive:</strong> instead of overwriting a running total, each sale is its own row. This matches the app's "+ Sold now" flow and keeps an auditable history you can filter by period.</p>
+
+  <!-- ===== 4. COGS LOGIC ===== -->
+  <h2 style="font-size:19px;margin:26px 0 10px;padding-bottom:6px;border-bottom:2px solid #eceafa">4 · Weighted-average COGS — in the database</h2>
+  <p style="font-size:13.5px;line-height:1.65;margin:0 0 10px">Putting the math in SQL <strong>views</strong> means the number is computed once and every screen (and any report) reads the identical value. The logic mirrors the prototype exactly:</p>
+  <ol style="font-size:12.5px;line-height:1.65;margin:0 0 12px;padding-left:20px">
+    <li><strong>Landed cost per line</strong> = (unit price × conversion rate) + additional-charges-per-unit.</li>
+    <li><strong>Additional charges</strong> = (shipping + tax) pooled and allocated <strong>by weight</strong>: <code>(shipping+tax) ÷ batch total weight × sku weight</code>.</li>
+    <li><strong>Weighted-average cost per SKU</strong> across all batches = <code>Σ(landed × qty) ÷ Σ(qty)</code>.</li>
+    <li><strong>COGS</strong> = units sold × weighted-average cost. <strong>On-hand value</strong> = remaining × weighted-average cost.</li>
+  </ol>
+
+  <pre style="background:#0f1e3d;color:#dfe7f5;border-radius:10px;padding:16px 18px;font-size:11.5px;line-height:1.65;overflow-x:auto;margin:0;white-space:pre-wrap">-- ============ views.sql ============
+
+-- Total weight of each batch (Σ qty × sku weight)
+create or replace view batch_weight as
+select pl.batch_id,
+       sum(pl.quantity * s.weight_g) as total_weight_g
+from purchase_lines pl
+join skus s on s.id = pl.sku_id
+group by pl.batch_id;
+
+-- Landed cost (GBP) for every purchase line
+create or replace view line_landed_cost as
+select pl.id            as line_id,
+       pl.batch_id,
+       pl.sku_id,
+       pl.quantity,
+       -- goods, converted to GBP
+       (pl.unit_price * b.conversion_rate)                            as unit_gbp,
+       -- shipping + tax, allocated purely by weight
+       ((b.shipping_gbp + b.tax_gbp)
+          * (s.weight_g / nullif(bw.total_weight_g, 0)))              as add_per_unit,
+       -- full landed unit cost
+       (pl.unit_price * b.conversion_rate)
+          + ((b.shipping_gbp + b.tax_gbp)
+             * (s.weight_g / nullif(bw.total_weight_g, 0)))           as landed_unit_gbp
+from purchase_lines pl
+join purchase_batches b on b.id = pl.batch_id
+join skus s             on s.id = pl.sku_id
+join batch_weight bw    on bw.batch_id = pl.batch_id;
+
+-- Weighted-average cost per SKU (pools all batches)
+create or replace view sku_avg_cost as
+select sku_id,
+       sum(quantity)                             as received,
+       sum(landed_unit_gbp * quantity)           as total_cost_gbp,
+       sum(landed_unit_gbp * quantity)
+         / nullif(sum(quantity), 0)              as avg_cost_gbp
+from line_landed_cost
+group by sku_id;
+
+-- Units sold per SKU (sum of additive sales rows)
+create or replace view sku_sold as
+select sku_id, coalesce(sum(quantity), 0) as sold
+from sales group by sku_id;
+
+-- The inventory / COGS view the app reads
+create or replace view inventory_cogs as
+select s.id                              as sku_id,
+       s.sku_code,
+       s.label,
+       p.name                            as product,
+       coalesce(ac.received, 0)          as received,
+       coalesce(ss.sold, 0)              as sold,
+       coalesce(ac.received,0) - coalesce(ss.sold,0)          as remaining,
+       coalesce(ac.avg_cost_gbp, 0)                           as avg_cost_gbp,
+       (coalesce(ac.received,0)-coalesce(ss.sold,0))
+          * coalesce(ac.avg_cost_gbp,0)                       as on_hand_value_gbp,
+       coalesce(ss.sold,0) * coalesce(ac.avg_cost_gbp,0)      as cogs_gbp
+from skus s
+join products p       on p.id = s.product_id
+left join sku_avg_cost ac on ac.sku_id = s.id
+left join sku_sold ss     on ss.sku_id = s.id;</pre>
+  <p style="font-size:11.5px;line-height:1.55;margin:8px 0 0;color:#7a76bb"><strong>To read it from the app:</strong> <code>supabase.from('inventory_cogs').select('*')</code> returns every SKU with live remaining, average cost, on-hand value, and COGS — no math needed in the browser.</p>
+
+  <!-- ===== 5. CONNECTION ===== -->
+  <h2 style="font-size:19px;margin:26px 0 10px;padding-bottom:6px;border-bottom:2px solid #eceafa">5 · Connecting the app</h2>
+  <p style="font-size:13.5px;line-height:1.65;margin:0 0 8px">The app ships with this integration built in. Paste your <strong>Project URL</strong> and <strong>anon public key</strong> (Supabase → Settings → API) into <code>supabase-config.js</code> — the app runs in demo mode until both are set, then switches to live reads/writes automatically. The anon key is safe in a public repo <em>as long as Row Level Security is on</em> (Section 6).</p>
+  <pre style="background:#0f1e3d;color:#dfe7f5;border-radius:10px;padding:14px 18px;font-size:11.5px;line-height:1.65;overflow-x:auto;margin:0 0 12px;white-space:pre-wrap">// supabase-config.js  — the only file you edit to go live
+window.LYZOO_CONFIG = {
+  url: 'https://YOUR-PROJECT.supabase.co',
+  anonKey: 'YOUR-ANON-PUBLIC-KEY'
+};</pre>
+  <pre style="background:#0f1e3d;color:#dfe7f5;border-radius:10px;padding:16px 18px;font-size:11.5px;line-height:1.65;overflow-x:auto;margin:0;white-space:pre-wrap">&lt;!-- index.html: load the client from CDN --&gt;
+&lt;script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"&gt;&lt;/script&gt;
+
+// assets/supabase.js
+const SUPABASE_URL  = 'https://YOUR-PROJECT.supabase.co';
+const SUPABASE_ANON = 'YOUR-ANON-PUBLIC-KEY';
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+
+// --- read inventory + COGS (all math done in the DB) ---
+const { data: inventory } = await db.from('inventory_cogs').select('*');
+
+// --- create a product + its SKUs ---
+const { data: product } = await db
+  .from('products').insert({ name: 'USB Flash Drive' }).select().single();
+await db.from('skus').insert(
+  rows.map(r =&gt; ({ product_id: product.id, sku_code: r.sku, weight_g: r.weight }))
+);
+
+// --- record a purchase batch + lines ---
+const { data: batch } = await db.from('purchase_batches').insert({
+  po_number:'PO-2025-014', supplier:'Shenzhen Tech Co.', origin:'China',
+  currency:'USD', conversion_rate:0.79, shipping_gbp:180, tax_gbp:60
+}).select().single();
+await db.from('purchase_lines').insert(
+  lines.map(l =&gt; ({ batch_id: batch.id, sku_id: l.skuId,
+                    quantity: l.qty, unit_price: l.price }))
+);
+
+// --- record NEW sales (additive — never overwrite) ---
+await db.from('sales').insert({ sku_id: skuId, quantity: soldNow });</pre>
+
+  <!-- ===== 6. AUTH + RLS ===== -->
+  <h2 style="font-size:19px;margin:26px 0 10px;padding-bottom:6px;border-bottom:2px solid #eceafa">6 · Authentication &amp; security</h2>
+  <p style="font-size:13.5px;line-height:1.65;margin:0 0 8px">For a single business login: Supabase → <strong>Authentication</strong> → add your user (email + password), and disable public sign-ups (Providers → Email → turn off "Enable sign-ups"). Then gate the app:</p>
+  <pre style="background:#0f1e3d;color:#dfe7f5;border-radius:10px;padding:16px 18px;font-size:11.5px;line-height:1.65;overflow-x:auto;margin:0 0 12px;white-space:pre-wrap">const { data:{ session } } = await db.auth.getSession();
+if (!session) showLogin();          // else render the app
+
+await db.auth.signInWithPassword({ email, password });
+
+// Settings page → update the signed-in user's email / password
+await db.auth.updateUser({ email: newEmail });
+await db.auth.updateUser({ password: newPassword });</pre>
+  <p style="font-size:11.5px;line-height:1.55;margin:8px 0 0;color:#7a76bb"><strong>Seed the business login</strong> in Supabase → Authentication → Users → Add user, e.g. <code>info@lyzoo.co.uk</code>. The prototype's Settings page (Profile + Change password) maps directly to <code>auth.updateUser</code>; the in-app credential check in the prototype is demo-only — real auth must go through Supabase.</p>
+  <p style="font-size:13.5px;line-height:1.65;margin:0 0 8px"><strong>Turn on Row Level Security</strong> so the anon key can't read/write without a logged-in session. Run <code>policies.sql</code>:</p>
+  <pre style="background:#0f1e3d;color:#dfe7f5;border-radius:10px;padding:16px 18px;font-size:11.5px;line-height:1.65;overflow-x:auto;margin:0;white-space:pre-wrap">-- ============ policies.sql ============
+alter table products         enable row level security;
+alter table skus             enable row level security;
+alter table purchase_batches enable row level security;
+alter table purchase_lines   enable row level security;
+alter table sales            enable row level security;
+
+-- Any authenticated user of this business may read + write.
+-- (Repeat this block for each table.)
+create policy "auth read"  on products for select
+  using (auth.role() = 'authenticated');
+create policy "auth write" on products for all
+  using (auth.role() = 'authenticated')
+  with check (auth.role() = 'authenticated');</pre>
+  <p style="font-size:11.5px;line-height:1.55;margin:8px 0 0;color:#7a76bb"><strong>Later, for staff roles:</strong> add a <code>role</code> column to a <code>profiles</code> table and change the write policy to <code>using (auth.jwt() -&gt;&gt; 'role' = 'admin')</code>.</p>
+
+  <!-- ===== 7. FILE UPLOAD ===== -->
+  <h2 style="font-size:19px;margin:26px 0 10px;padding-bottom:6px;border-bottom:2px solid #eceafa">7 · SKU sheet upload &amp; validation</h2>
+  <p style="font-size:13.5px;line-height:1.65;margin:0 0 8px">The prototype already validates the sheet in the browser (max 2 columns: <strong>SKU, Weight</strong>; positive numeric weight; no duplicates). Keep that validation, then insert the clean rows. For Excel files, convert to CSV on export, or add SheetJS (<code>xlsx</code>) to read <code>.xlsx</code> directly. Google Sheets: File → Download → CSV.</p>
+  <pre style="background:#0f1e3d;color:#dfe7f5;border-radius:10px;padding:16px 18px;font-size:11.5px;line-height:1.65;overflow-x:auto;margin:0;white-space:pre-wrap">// after client-side validation passes:
+const { error } = await db.from('skus').insert(
+  validRows.map(r =&gt; ({ product_id, sku_code: r.sku, weight_g: r.weight }))
+);
+// unique constraint on sku_code rejects duplicates at the DB level too.</pre>
+  <p style="font-size:11.5px;line-height:1.55;margin:8px 0 0;color:#7a76bb">Give users the <strong>Download template</strong> button (already in the app) so the sheet always has the correct <code>SKU,Weight</code> header. Optionally archive the raw uploaded file to Supabase Storage for audit.</p>
+
+  <!-- ===== 8. DEPLOY ===== -->
+  <h2 style="font-size:19px;margin:26px 0 10px;padding-bottom:6px;border-bottom:2px solid #eceafa">8 · GitHub connection &amp; deployment</h2>
+  <ol style="font-size:13px;line-height:1.75;margin:0 0 10px;padding-left:20px">
+    <li>Create a new GitHub repository (e.g. <code>lyzoo</code>).</li>
+    <li>Push your project files to the <code>main</code> branch:
+      <pre style="background:#0f1e3d;color:#dfe7f5;border-radius:8px;padding:11px 14px;font-size:11px;line-height:1.6;margin:6px 0;white-space:pre-wrap">git init
+git add .
+git commit -m "Lyzoo Group initial"
+git branch -M main
+git remote add origin https://github.com/USER/lyzoo.git
+git push -u origin main</pre>
+    </li>
+    <li>In the repo → <strong>Settings → Pages</strong> → Source: <em>Deploy from a branch</em> → Branch: <code>main</code>, folder <code>/ (root)</code> → Save.</li>
+    <li>Your app goes live at <code>https://USER.github.io/lyzoo/</code> within a minute.</li>
+    <li>In Supabase → Authentication → URL Configuration, add that GitHub Pages URL to <strong>Site URL / Redirect URLs</strong> so login works.</li>
+  </ol>
+  <p style="font-size:11.5px;line-height:1.55;margin:0;color:#7a76bb"><strong>Keys in a public repo:</strong> the anon key is designed to be public — RLS (Section 6) is what actually protects your data. Never put the <em>service_role</em> key in the frontend.</p>
+
+  <!-- ===== 9. TESTING ===== -->
+  <h2 style="font-size:19px;margin:26px 0 10px;padding-bottom:6px;border-bottom:2px solid #eceafa">9 · Testing &amp; accuracy checklist</h2>
+  <p style="font-size:13.5px;line-height:1.65;margin:0 0 10px">Do all of this on <code>lyzoo-dev</code> before switching to prod.</p>
+  <table style="width:100%;border-collapse:collapse;font-size:12px">
+    <thead><tr style="background:#103164">
+      <th style="text-align:left;padding:8px 12px;color:#fff;font-weight:700;border:1px solid #103164;width:38%">Check</th>
+      <th style="text-align:left;padding:8px 12px;color:#fff;font-weight:700;border:1px solid #103164">How to confirm it's accurate</th>
+    </tr></thead>
+    <tbody>
+      <tr><td style="padding:7px 12px;border:1px solid #e4e1f7;font-weight:600;color:#103164">Single batch landed cost</td><td style="padding:7px 12px;border:1px solid #e4e1f7">Enter one PO you already know. Compare the app's Landed £ to your spreadsheet figure — they must match to the penny.</td></tr>
+      <tr style="background:#faf9fe"><td style="padding:7px 12px;border:1px solid #e4e1f7;font-weight:600;color:#103164">Weight allocation</td><td style="padding:7px 12px;border:1px solid #e4e1f7">Two SKUs, different weights, same batch: the heavier one must carry proportionally more shipping+tax. Ratio of add-per-unit = ratio of weights.</td></tr>
+      <tr><td style="padding:7px 12px;border:1px solid #e4e1f7;font-weight:600;color:#103164">Currency conversion</td><td style="padding:7px 12px;border:1px solid #e4e1f7">A USD batch at rate 0.79: unit £ = unit $ × 0.79. A UK/GBP batch (rate 1) is unchanged.</td></tr>
+      <tr style="background:#faf9fe"><td style="padding:7px 12px;border:1px solid #e4e1f7;font-weight:600;color:#103164">Weighted average across batches</td><td style="padding:7px 12px;border:1px solid #e4e1f7">Same SKU in two batches at different costs. Confirm avg = Σ(landed×qty) ÷ Σqty by hand.</td></tr>
+      <tr><td style="padding:7px 12px;border:1px solid #e4e1f7;font-weight:600;color:#103164">COGS after a sale</td><td style="padding:7px 12px;border:1px solid #e4e1f7">Record N units sold; COGS should increase by N × avg cost, and remaining + on-hand value should drop accordingly.</td></tr>
+      <tr style="background:#faf9fe"><td style="padding:7px 12px;border:1px solid #e4e1f7;font-weight:600;color:#103164">DB vs UI agree</td><td style="padding:7px 12px;border:1px solid #e4e1f7">Run <code>select * from inventory_cogs;</code> in the SQL Editor and compare to the Inventory screen — identical numbers.</td></tr>
+      <tr><td style="padding:7px 12px;border:1px solid #e4e1f7;font-weight:600;color:#103164">Upload validation</td><td style="padding:7px 12px;border:1px solid #e4e1f7">Try a bad sheet (3 columns, blank weight, duplicate SKU). App must reject with a clear message; DB unique constraint blocks dupes.</td></tr>
+      <tr style="background:#faf9fe"><td style="padding:7px 12px;border:1px solid #e4e1f7;font-weight:600;color:#103164">Security</td><td style="padding:7px 12px;border:1px solid #e4e1f7">Log out and hit a table via the anon key — RLS must return zero rows / deny writes.</td></tr>
+    </tbody>
+  </table>
+
+  <!-- ===== 10. CRUD ===== -->
+  <h2 style="font-size:19px;margin:26px 0 10px;padding-bottom:6px;border-bottom:2px solid #eceafa">10 · Editing &amp; deleting records</h2>
+  <p style="font-size:13.5px;line-height:1.65;margin:0 0 8px">The app lets users fix mistakes anywhere: edit a product or its SKUs, edit or delete a purchase batch, or delete a dead product/SKU. Because all cost/COGS numbers live in the SQL <strong>views</strong>, every edit or delete recalculates inventory &amp; weighted-average COGS automatically — no extra write logic.</p>
+  <p style="font-size:12.5px;line-height:1.6;margin:0 0 8px"><strong>Add these cascade rules</strong> so deleting a SKU also clears its purchase lines &amp; sales (matching the app's cleanup):</p>
+  <pre style="background:#0f1e3d;color:#dfe7f5;border-radius:10px;padding:16px 18px;font-size:11.5px;line-height:1.65;overflow-x:auto;margin:0 0 10px;white-space:pre-wrap">-- make SKU deletes clean up dependent rows
+alter table purchase_lines
+  drop constraint purchase_lines_sku_id_fkey,
+  add  constraint purchase_lines_sku_id_fkey
+       foreign key (sku_id) references skus(id) on delete cascade;
+alter table sales
+  drop constraint sales_sku_id_fkey,
+  add  constraint sales_sku_id_fkey
+       foreign key (sku_id) references skus(id) on delete cascade;</pre>
+  <pre style="background:#0f1e3d;color:#dfe7f5;border-radius:10px;padding:16px 18px;font-size:11.5px;line-height:1.65;overflow-x:auto;margin:0;white-space:pre-wrap">// --- edit a product (name) ---
+await db.from('products').update({ name }).eq('id', productId);
+
+// --- edit a SKU (code / weight) ---
+await db.from('skus').update({ sku_code, weight_g }).eq('id', skuId);
+
+// --- delete a SKU (purchase_lines & sales cascade) ---
+await db.from('skus').delete().eq('id', skuId);
+
+// --- delete a product (its skus cascade; then its batches) ---
+await db.from('purchase_batches').delete().eq('product_id', productId);
+await db.from('products').delete().eq('id', productId);
+
+// --- edit a purchase batch: update header, replace its lines ---
+await db.from('purchase_batches').update({
+  supplier, origin, currency, conversion_rate, shipping_gbp, tax_gbp
+}).eq('id', batchId);
+await db.from('purchase_lines').delete().eq('batch_id', batchId);
+await db.from('purchase_lines').insert(newLines);
+
+// --- delete a batch (lines cascade via schema) ---
+await db.from('purchase_batches').delete().eq('id', batchId);</pre>
+  <p style="font-size:11.5px;line-height:1.55;margin:8px 0 0;color:#7a76bb">Gate destructive actions behind a confirm dialog in the UI (the prototype does). RLS still applies — only an authenticated session can update/delete.</p>
+
+  <!-- ===== 11. ANALYTICS VIEWS ===== -->
+  <h2 style="font-size:19px;margin:26px 0 10px;padding-bottom:6px;border-bottom:2px solid #eceafa">11 · Dashboard analytics views</h2>
+  <p style="font-size:13.5px;line-height:1.65;margin:0 0 10px">The dashboard's Fast-movers, Slow-moving/dead stock, and Low-stock cards all read from one extended view built on <code>inventory_cogs</code>. <strong>Months of cover</strong> assumes sales accumulate over a 3-month window (monthly velocity = sold ÷ 3); adjust the divisor to your reporting period.</p>
+  <pre style="background:#0f1e3d;color:#dfe7f5;border-radius:10px;padding:16px 18px;font-size:11.5px;line-height:1.65;overflow-x:auto;margin:0;white-space:pre-wrap">-- SKU metrics: sell-through, monthly velocity, months of cover
+create or replace view sku_metrics as
+select ic.*,
+       case when ic.received &gt; 0
+            then ic.sold::numeric / ic.received else 0 end        as sell_through,
+       (ic.sold::numeric / 3.0)                                   as per_month,
+       case when ic.sold &gt; 0
+            then ic.remaining / (ic.sold::numeric / 3.0)
+            else null end                                         as months_cover
+from inventory_cogs ic;
+
+-- Fast movers: rank by units sold (filter by product in the query)
+-- select * from sku_metrics order by sold desc limit 6;
+
+-- Slow-moving & dead stock: stock on hand, weakest sell-through first
+-- 'Dead' = sold = 0 with remaining &gt; 0
+-- select *, (sold = 0) as is_dead from sku_metrics
+--   where remaining &gt; 0 order by sell_through asc, on_hand_value_gbp desc;
+
+-- Low stock: below a threshold (parameterise in the query / RPC)
+-- select * from sku_metrics where remaining &gt; 0 and remaining &lt; 120
+--   order by remaining asc;</pre>
+  <p style="font-size:11.5px;line-height:1.55;margin:8px 0 0;color:#7a76bb">The low-stock threshold, default $→£ rate, and reporting currency symbol are app-level <strong>Tweaks</strong> (props) in the prototype — store them in a small <code>settings</code> table (or app config) if you want them editable in production.</p>
+
+  <div style="background:#f6f6fd;border:1px solid #e4e1f7;border-radius:10px;padding:14px 16px;margin:18px 0 0">
+    <div style="font-size:11px;font-weight:800;color:#4f46e5;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Going to production</div>
+    <p style="font-size:12.5px;line-height:1.6;margin:0">Once every check passes in dev: run <code>schema.sql</code>, <code>views.sql</code>, and <code>policies.sql</code> on <code>lyzoo-prod</code>, swap the URL + anon key in <code>supabase.js</code>, push to GitHub, and add the Pages URL to Supabase Auth. Keep dev around for future changes — test there first, always.</p>
+  </div>
+
+</x-import>
+</x-dc>
+</body>
+</html>
