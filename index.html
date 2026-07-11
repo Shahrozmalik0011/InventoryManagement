@@ -866,21 +866,24 @@ class Component extends DCLogic {
     const name=(np.name||'').trim()||'Untitled product';
     const skus=np.skus.filter(r=>(r.sku||'').trim()).map(r=>({ code:r.sku.trim(), weight:Number(r.weight)||0 }));
     if(!skus.length){ this.setState({ upload:{ok:false,errors:['Add at least one SKU before saving.'],count:0} }); return; }
+    const zeroWeight=skus.filter(s=>!(s.weight>0)).map(s=>s.code);
+    if(zeroWeight.length){ this.setState({ upload:{ok:false,errors:['Weight (g) must be greater than 0 for: '+zeroWeight.join(', ')],count:0} }); return; }
     try{
       if(np.editId){
         const pid=np.editId;
-        await this.db.from('products').update({ name }).eq('id', pid);
+        { const {error}=await this.db.from('products').update({ name }).eq('id', pid); if(error) throw error; }
         const prod=this.state.products.find(p=>p.id===pid);
         const oldCodes=(prod?prod.skus:[]).map(s=>s.sku);
         const newCodes=skus.map(s=>s.code);
-        for(const code of oldCodes.filter(c=>!newCodes.includes(c))){ const id=this.skuIdByCode[code]; if(id) await this.db.from('skus').delete().eq('id', id); }
+        for(const code of oldCodes.filter(c=>!newCodes.includes(c))){ const id=this.skuIdByCode[code]; if(id){ const {error}=await this.db.from('skus').delete().eq('id', id); if(error) throw error; } }
         for(const s of skus){ const id=this.skuIdByCode[s.code];
-          if(id) await this.db.from('skus').update({ weight_g:s.weight }).eq('id', id);
-          else await this.db.from('skus').insert({ product_id:pid, sku_code:s.code, label:s.code, weight_g:s.weight }); }
+          if(id){ const {error}=await this.db.from('skus').update({ weight_g:s.weight }).eq('id', id); if(error) throw error; }
+          else{ const {error}=await this.db.from('skus').insert({ product_id:pid, sku_code:s.code, label:s.code, weight_g:s.weight }); if(error) throw error; } }
       } else {
         const { data:product, error } = await this.db.from('products').insert({ name }).select().single();
         if(error) throw error;
-        await this.db.from('skus').insert(skus.map(s=>({ product_id:product.id, sku_code:s.code, label:s.code, weight_g:s.weight })));
+        const { error:skuErr } = await this.db.from('skus').insert(skus.map(s=>({ product_id:product.id, sku_code:s.code, label:s.code, weight_g:s.weight })));
+        if(skuErr) throw skuErr;
       }
       this.setState({ modal:null, newProduct:null, upload:null });
       await this.loadFromDb();
