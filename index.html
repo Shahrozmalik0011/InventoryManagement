@@ -901,17 +901,26 @@ class Component extends DCLogic {
       let batchId;
       if(np.editId){
         batchId=np.origDbId;
-        await this.db.from('purchase_batches').update(header).eq('id', batchId);
-        await this.db.from('purchase_lines').delete().eq('batch_id', batchId);
+        { const {error}=await this.db.from('purchase_batches').update(header).eq('id', batchId); if(error) throw error; }
+        { const {error}=await this.db.from('purchase_lines').delete().eq('batch_id', batchId); if(error) throw error; }
       } else {
         const year=(np.date||'').slice(0,4)||String(new Date().getFullYear());
-        const po='PO-'+year+'-'+String(this.state.batches.length+1).padStart(3,'0');
-        const { data:batch, error } = await this.db.from('purchase_batches').insert({ ...header, po_number:po }).select().single();
-        if(error) throw error;
+        const prefix='PO-'+year+'-';
+        const usedSeqs=this.state.batches.map(b=>b.id).filter(id=>id&&id.startsWith(prefix)).map(id=>parseInt(id.slice(prefix.length),10)).filter(n=>!isNaN(n));
+        let seq=(usedSeqs.length?Math.max(...usedSeqs):0)+1;
+        let batch=null, lastErr=null;
+        for(let attempt=0; attempt<5 && !batch; attempt++){
+          const po=prefix+String(seq).padStart(3,'0');
+          const { data, error } = await this.db.from('purchase_batches').insert({ ...header, po_number:po }).select().single();
+          if(!error){ batch=data; break; }
+          if(error.code==='23505'){ lastErr=error; seq++; continue; }
+          throw error;
+        }
+        if(!batch) throw lastErr || new Error('Could not generate a unique PO number. Please try saving again.');
         batchId=batch.id;
       }
       const rows=linesArr.map(l=>({ batch_id:batchId, sku_id:this.skuIdByCode[l.sku], quantity:l.qty, unit_price:l.price })).filter(r=>r.sku_id);
-      if(rows.length) await this.db.from('purchase_lines').insert(rows);
+      if(rows.length){ const {error}=await this.db.from('purchase_lines').insert(rows); if(error) throw error; }
       this.setState({ modal:null, newPurchase:null, view:'purchases' });
       await this.loadFromDb();
     }catch(e){ this._dberr(e); }
